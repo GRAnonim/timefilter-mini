@@ -272,7 +272,7 @@
       '<button class="linkish" data-act="home">На главную</button>' +
       '<p class="kicker">' + esc(event.description) + "</p>" +
       '<span class="verdict ' + advice.code + '">' + esc(advice.title) + "</span>" +
-      "<h1>" + esc(advice.title) + "</h1>"
+      "<h1>" + esc(advice.title) + "</h1>" +
       '<p class="body">' + esc(advice.body) + "</p>" +
       phrase +
       '<div class="stack">' +
