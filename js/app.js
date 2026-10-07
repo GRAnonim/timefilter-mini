@@ -13,7 +13,10 @@
     tg.expand();
     if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
     tg.BackButton.onClick(back);
+    if (tg.onEvent) tg.onEvent("themeChanged", render);
   }
+
+  document.documentElement.classList.toggle("dark", (tg && tg.colorScheme === "dark") || (!tg && window.matchMedia("(prefers-color-scheme: dark)").matches));
 
   function esc(value) {
     return String(value == null ? "" : value)
@@ -47,10 +50,27 @@
     open({ name: "home" }, true);
   }
 
+  function isDark() {
+    if (tg && tg.colorScheme) return tg.colorScheme === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+
   function syncChrome() {
+    const dark = isDark();
+    document.documentElement.classList.toggle("dark", dark);
+    const bg = dark ? "#0c1016" : "#e7eef6";
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", bg);
     if (!tg) return;
     if (view.name === "home") tg.BackButton.hide();
     else tg.BackButton.show();
+    try {
+      if (tg.setHeaderColor) tg.setHeaderColor(bg);
+      if (tg.setBackgroundColor) tg.setBackgroundColor(bg);
+      if (tg.setBottomBarColor) tg.setBottomBarColor(bg);
+    } catch (error) {
+      /* Старые клиенты Telegram принимают только свои имена цветов. */
+    }
   }
 
   function save() {
@@ -84,8 +104,8 @@
 
   function render() {
     syncChrome();
-    const banner = insideTelegram ? "" : '<p class="banner">Это мини-приложение откроется внутри Telegram кнопкой меню. Сейчас его можно полистать здесь.</p>';
-    root.innerHTML = banner + screen();
+    const banner = insideTelegram ? "" : '<p class="banner">Так экран выглядит в Telegram. Открывается кнопкой у поля сообщения.</p>';
+    root.innerHTML = '<main class="screen">' + screen() + "</main>" + banner;
     const box = root.querySelector("[data-focus]");
     if (box) box.focus();
   }
@@ -106,23 +126,19 @@
 
   function homeScreen() {
     if (data.goals.length < 2) return goalsScreen(true);
-    const goals = data.goals.map(function (goal) {
-      return '<span class="goal">' + esc(goal) + "</span>";
-    }).join("");
+    const line = data.goals.map(esc).join(" · ");
     return (
-      '<p class="kicker">Мой фильтр времени</p>' +
-      "<h1>Куда сейчас стоит тратить силы?</h1>" +
-      '<p class="lead">Сверь приглашение с целями, желанием и запасом энергии.</p>' +
-      '<div class="goals">' + goals + "</div>" +
-      '<button class="linkish" data-act="goals">Изменить цели</button>' +
+      '<p class="kicker">Фильтр времени</p>' +
+      "<h1>Что пришло?</h1>" +
+      '<button class="goals-strip" data-act="goals"><span>Цели на полгода</span><strong>' + line + "</strong></button>" +
       '<div class="stack">' +
-        card("work", "Работа и мероприятия", "Встречи, задачи, проекты") +
-        card("family", "Близкие родственники", "Просьбы и семейные встречи") +
-        card("friend", "Друзья и знакомые", "Кино, гости, «давай увидимся»") +
+        card("work", "Работа", "Встречи, задачи, проекты") +
+        card("family", "Семья", "Просьбы и встречи близких") +
+        card("friend", "Друзья", "Гости, кино, «давай увидимся»") +
       "</div>" +
-      '<div class="row" style="margin-top:12px">' +
-        '<button class="tap quiet" data-act="reports"><strong>Отчёт</strong><span>После встречи</span></button>' +
-        '<button class="tap quiet" data-act="stats"><strong>Сводка</strong><span>Неделя и дальше</span></button>' +
+      '<div class="footer-links">' +
+        '<button class="textbtn" data-act="reports">Отчёт</button>' +
+        '<button class="textbtn" data-act="stats">Сводка</button>' +
       "</div>"
     );
   }
@@ -134,16 +150,21 @@
   function goalsScreen(embedded) {
     const values = [data.goals[0] || "", data.goals[1] || "", data.goals[2] || ""];
     return (
-      (embedded ? "" : '<button class="linkish" data-act="back">Назад</button>') +
+      (embedded ? "" : navBack()) +
       '<p class="kicker">Ориентиры</p>' +
-      "<h1>Два или три направления на полгода</h1>" +
-      '<p class="lead">На них будем смотреть, когда придёт очередное приглашение.</p>' +
-      field("Цель 1", "g1", values[0], "Например, закрыть диплом") +
-      field("Цель 2", "g2", values[1], "Например, английский") +
-      field("Цель 3, если нужна", "g3", values[2], "Можно оставить пустой") +
+      "<h1>Две цели на полгода</h1>" +
+      '<p class="lead">На них будем смотреть, когда придёт приглашение. Третья — если нужна.</p>' +
+      field("Первая", "g1", values[0], "Закрыть диплом") +
+      field("Вторая", "g2", values[1], "Английский") +
+      field("Третья, если нужна", "g3", values[2], "Можно оставить пустой") +
       '<p class="error" id="goal-error" hidden></p>' +
-      '<div class="stack"><button class="choice go" data-act="save-goals">Сохранить цели</button></div>'
+      '<div class="stack"><button class="choice primary" data-act="save-goals">Сохранить</button></div>'
     );
+  }
+
+  function navBack() {
+    if (insideTelegram) return "";
+    return '<button class="textbtn" data-act="back">Назад</button>';
   }
 
   function field(label, id, value, placeholder) {
@@ -167,14 +188,14 @@
   function describeScreen() {
     const meta = L.KIND_META[view.kind];
     return (
-      '<button class="linkish" data-act="back">Назад</button>' +
+      navBack() +
       '<p class="kicker">' + esc(meta.mark) + "</p>" +
-      "<h1>Что за ситуация?</h1>" +
-      '<p class="lead">Одно-два предложения, как ты сам её называешь.</p>' +
+      "<h1>Как это называется?</h1>" +
+      '<p class="lead">Одно-два слова, чтобы потом узнать.</p>' +
       '<label class="lbl" for="desc">Ситуация</label>' +
-      '<textarea id="desc" data-focus maxlength="500" placeholder="Например: пригласили на созвон в четверг"></textarea>' +
+      '<textarea id="desc" data-focus maxlength="500" placeholder="Созвон в четверг"></textarea>' +
       '<p class="error" id="desc-error" hidden></p>' +
-      '<div class="stack"><button class="choice" data-act="save-text">Дальше</button></div>'
+      '<div class="stack"><button class="choice primary" data-act="save-text">Дальше</button></div>'
     );
   }
 
@@ -203,23 +224,41 @@
   function questionScreen(questions, feedback) {
     const question = L.nextQuestion(questions, view.answers);
     if (!question) return "";
-    const answered = Object.keys(view.answers).length + 1;
-    const chips = (question.options || []).map(function (option) {
+    const options = question.options || [];
+    const short = options.every(function (option) { return option.label.length <= 16; });
+    const layout = options.length === 2 ? "pair" : (options.length >= 4 && short ? "grid" : "");
+    const chips = options.map(function (option) {
       return '<button class="choice" data-act="answer" data-value="' + esc(option.value) + '" data-label="' + esc(option.label) + '">' + esc(option.label) + "</button>";
     }).join("");
     const free = question.kind === "text"
-      ? '<label class="lbl" for="free">Или своими словами</label><textarea id="free" maxlength="300" placeholder="Коротко"></textarea><div class="stack"><button class="choice quiet" data-act="save-text">Дальше</button></div>'
+      ? '<label class="lbl" for="free">Или своими словами</label><textarea id="free" maxlength="300" placeholder="Коротко"></textarea><div class="stack"><button class="choice primary" data-act="save-text">Дальше</button></div>'
       : "";
     const title = feedback ? "Отчёт" : L.KIND_META[view.kind].mark;
+    const progress = stepProgress(questions, view.answers);
     const note = feedback ? '<p class="lead">' + esc(clip(eventById(view.eventId).description, 140)) + "</p>" : "";
     return (
-      '<button class="linkish" data-act="back">Назад</button>' +
-      '<p class="step">' + esc(title) + " · шаг " + answered + "</p>" +
+      navBack() +
+      '<div class="track" aria-hidden="true"><span style="width:' + Math.round(progress.ratio * 100) + '%"></span></div>' +
+      '<p class="sr">Вопрос ' + progress.current + " из " + progress.total + "</p>" +
+      '<p class="step">' + esc(title) + "</p>" +
       "<h2>" + esc(question.prompt) + "</h2>" +
       note +
-      '<div class="stack">' + chips + "</div>" +
+      '<div class="choices ' + layout + '">' + chips + "</div>" +
       free
     );
+  }
+
+  function stepProgress(questions, answers) {
+    let total = 0;
+    let done = 0;
+    questions.forEach(function (question) {
+      const answered = Object.prototype.hasOwnProperty.call(answers, question.key);
+      if (question.onlyIf && !question.onlyIf(answers) && !answered) return;
+      total += 1;
+      if (answered) done += 1;
+    });
+    const current = Math.min(total, done + 1);
+    return { current: current, total: Math.max(total, 1), ratio: total ? current / total : 1 };
   }
 
   function onAnswer(value, label) {
@@ -269,17 +308,16 @@
       ? '<div class="phrase"><span class="hint">Можно ответить так</span><p>' + esc(advice.phrase) + '</p><button class="linkish" data-act="copy" data-phrase="' + esc(advice.phrase) + '">Скопировать</button></div>'
       : "";
     return (
-      '<button class="linkish" data-act="home">На главную</button>' +
-      '<p class="kicker">' + esc(event.description) + "</p>" +
+      '<p class="kicker">' + esc(clip(event.description, 80)) + "</p>" +
       '<span class="verdict ' + advice.code + '">' + esc(advice.title) + "</span>" +
-      "<h1>" + esc(advice.title) + "</h1>" +
       '<p class="body">' + esc(advice.body) + "</p>" +
       phrase +
       '<div class="stack">' +
         '<button class="choice go" data-act="decision" data-value="planned">Запланировать</button>' +
         '<button class="choice stop" data-act="decision" data-value="declined">Отказаться</button>' +
         '<button class="choice later" data-act="decision" data-value="postponed">Перенести</button>' +
-      "</div>"
+      "</div>" +
+      '<div class="footer-links"><button class="textbtn" data-act="home">На главную</button></div>'
     );
   }
 
@@ -296,10 +334,10 @@
     if (view.name === "noted") return notedScreen();
     return (
       "<h1>Как с виной?</h1>" +
-      '<p class="body">Отказ от конкретной встречи — не отказ от человека. Хорошие отношения не измеряются количеством отказов.</p>' +
+      '<p class="lead">Отказ от встречи — не отказ от человека.</p>' +
       '<div class="stack">' +
         '<button class="choice" data-act="guilt" data-value="none">Вины нет</button>' +
-        '<button class="choice" data-act="guilt" data-value="passed">Была, но прошло</button>' +
+        '<button class="choice" data-act="guilt" data-value="passed">Была и прошла</button>' +
         '<button class="choice" data-act="guilt" data-value="still">Ещё есть</button>' +
         '<button class="choice quiet" data-act="guilt" data-value="skip">Пропустить</button>' +
       "</div>"
@@ -327,7 +365,7 @@
     return (
       "<h1>Отметил</h1>" +
       '<p class="body">' + esc(notes[view.decision] || view.note || "") + "</p>" +
-      '<div class="stack"><button class="choice" data-act="home">На главную</button></div>'
+      '<div class="stack"><button class="choice primary" data-act="home">На главную</button></div>'
     );
   }
 
@@ -340,7 +378,7 @@
     return (
       "<h1>Встреча разобрана</h1>" +
       '<p class="body">Так следующие решения будут точнее. ' + esc(lines[view.satisfaction] || "") + "</p>" +
-      '<div class="stack"><button class="choice" data-act="home">На главную</button></div>'
+      '<div class="stack"><button class="choice primary" data-act="home">На главную</button></div>'
     );
   }
 
@@ -351,7 +389,7 @@
     if (!pending.length) {
       const had = data.events.some(function (event) { return event.decision === "planned"; });
       return (
-        '<button class="linkish" data-act="back">Назад</button>' +
+        navBack() +
         "<h1>Отчёты</h1>" +
         '<p class="body">' + (had ? "По всем запланированным встречам отчёт уже есть." : "Пока нет встреч, которые ты отметил как запланированные.") + "</p>"
       );
@@ -360,7 +398,7 @@
       const meta = L.KIND_META[event.kind];
       return '<button class="tap ' + event.kind + '" data-act="begin-feedback" data-id="' + esc(event.id) + '"><strong>' + esc(clip(event.description, 80)) + "</strong><span>" + esc(meta.label) + "</span></button>";
     }).join("");
-    return '<button class="linkish" data-act="back">Назад</button><h1>По какой встрече отчёт?</h1><div class="stack">' + list + "</div>";
+    return navBack() + "<h1>По какой встрече?</h1>" + '<div class="stack">' + list + "</div>";
   }
 
   function statsScreen() {
@@ -401,7 +439,7 @@
         body += statBlock("Вина после отказа", "Не было " + report.guilt.none + " · прошла " + report.guilt.passed + " · ещё есть " + report.guilt.still);
       }
     }
-    return '<button class="linkish" data-act="back">Назад</button><p class="kicker">Сводка</p><h1>' + esc(report.title) + "</h1>" + '<div class="chips">' + chips + "</div>" + body;
+    return navBack() + '<p class="kicker">Сводка</p><h1>' + esc(report.title) + "</h1>" + '<div class="chips">' + chips + "</div>" + body;
   }
 
   function statBlock(title, html) {
