@@ -29,6 +29,7 @@
         key: "gain",
         prompt: "Что ты получишь, если пойдёшь?",
         kind: "text",
+        multi: true,
         options: [
           { value: "knowledge", label: "Новые знания" },
           { value: "contacts", label: "Контакты" },
@@ -41,6 +42,7 @@
         key: "cost",
         prompt: "Что ты потратишь?",
         kind: "text",
+        multi: true,
         options: [
           { value: "time", label: "Время" },
           { value: "energy", label: "Энергию" },
@@ -260,10 +262,15 @@
     return friendBody(code, answers);
   }
 
+  function onlyNothing(value) {
+    const parts = String(value || "").split(",").map(function (part) { return part.trim(); }).filter(Boolean);
+    return parts.length > 0 && parts.every(function (part) { return part === "Ничего особенного"; });
+  }
+
   function workBody(code, answers) {
     if (code === "go") {
       let body = "Это мероприятие выглядит значимым: оно связано с целями, и туда хочется. Можно идти — и сразу учесть, сколько времени и сил оно заберёт.";
-      if (answers.gain === "Ничего особенного") {
+      if (onlyNothing(answers.gain)) {
         body += " При этом отдача выглядит слабой. Если так и есть, отказаться тоже можно.";
       }
       return { body: body, phrase: "" };

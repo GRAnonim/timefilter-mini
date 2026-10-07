@@ -101,6 +101,7 @@
     else if (act === "reports") open({ name: "reports" });
     else if (act === "begin-feedback") open({ name: "feedback", eventId: button.dataset.id, answers: {} });
     else if (act === "answer") onAnswer(button.dataset.value, button.dataset.label);
+    else if (act === "toggle") toggleOption(button);
     else if (act === "decision") onDecision(button.dataset.value);
     else if (act === "guilt") onGuilt(button.dataset.value);
     else if (act === "copy") copyPhrase(button.dataset.phrase);
@@ -141,7 +142,7 @@
     }).join("");
     return (
       '<p class="kicker">Фильтр времени</p>' +
-      "<h1>Что пришло?</h1>" +
+      "<h1>Куда тебя зовут?</h1>" +
       '<button class="goals-strip" data-act="goals"><span class="goals-label">Цели на ' + esc(monthsPhrase(data.goalMonths)) + "</span>" + lines + "</button>" +
       '<div class="stack">' +
         card("work", "Работа", "Встречи, задачи, проекты") +
@@ -152,7 +153,7 @@
         '<button class="tool" data-act="reports">' + iconNote() + "<span>Отчёт</span></button>" +
         '<button class="tool" data-act="stats">' + iconChart() + "<span>Сводка</span></button>" +
       "</div>" +
-      '<button class="textbtn reset-link" data-act="reset-ask">Начать заново</button>'
+      '<button class="tool reset-link" data-act="reset-ask">' + iconReset() + "<span>Начать заново</span></button>"
     );
   }
 
@@ -264,6 +265,10 @@
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V10M12 19V5M19 19v-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 19h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
   }
 
+  function iconReset() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.2-5.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M20 4.5V9h-4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
   function navBack() {
     if (insideTelegram) return "";
     return '<button class="textbtn" data-act="back">Назад</button>';
@@ -289,16 +294,28 @@
     save().then(home);
   }
 
+  function describeTitle(kind) {
+    if (kind === "family") return "О чём просьба?";
+    if (kind === "friend") return "Какая встреча?";
+    return "Название мероприятия";
+  }
+
+  function describePlaceholder(kind) {
+    if (kind === "family") return "Например, помочь с переездом";
+    if (kind === "friend") return "Например, кино в субботу";
+    return "Например, созвон в четверг";
+  }
+
   function describeScreen() {
     const meta = L.KIND_META[view.kind];
     const preview = nextSituationName();
     return (
       navBack() +
       '<p class="kicker">' + esc(meta.mark) + "</p>" +
-      "<h1>Как это называется?</h1>" +
+      "<h1>" + esc(describeTitle(view.kind)) + "</h1>" +
       '<p class="lead">Необязательно. Если пропустить, будет «' + esc(preview) + "».</p>" +
-      '<label class="lbl" for="desc">Комментарий</label>' +
-      '<textarea id="desc" maxlength="500" placeholder="Например, созвон в четверг"></textarea>' +
+      '<label class="lbl" for="desc">Название</label>' +
+      '<textarea id="desc" maxlength="500" placeholder="' + esc(describePlaceholder(view.kind)) + '"></textarea>' +
       '<div class="stack">' +
         '<button class="choice primary" data-act="save-text">Дальше</button>' +
         '<button class="choice quiet" data-act="skip-desc">Пропустить</button>' +
@@ -314,9 +331,26 @@
     }
     const typed = document.getElementById("free");
     const text = typed ? typed.value.trim() : "";
-    if (!text) return;
     const questions = view.name === "feedback" ? L.FEEDBACK : L.SCENARIOS[view.kind];
     const question = L.nextQuestion(questions, view.answers);
+    if (!question) return;
+    if (question.multi) {
+      const parts = (view.picked || []).slice();
+      if (text) parts.push(text.slice(0, 300));
+      const error = document.getElementById("multi-error");
+      if (!parts.length) {
+        if (error) {
+          error.hidden = false;
+          error.textContent = "Выбери хотя бы один вариант или напиши свой.";
+        }
+        return;
+      }
+      const answers = Object.assign({}, view.answers);
+      answers[question.key] = parts.join(", ");
+      advance(answers);
+      return;
+    }
+    if (!text) return;
     const answers = Object.assign({}, view.answers);
     answers[question.key] = text.slice(0, 300);
     advance(answers);
@@ -341,12 +375,17 @@
     const options = question.options || [];
     const short = options.every(function (option) { return option.label.length <= 16; });
     const layout = options.length === 2 ? "pair" : (options.length >= 4 && short ? "grid" : "");
+    const picked = view.picked || [];
     const chips = options.map(function (option) {
-      return '<button class="choice" data-act="answer" data-value="' + esc(option.value) + '" data-label="' + esc(option.label) + '">' + esc(option.label) + "</button>";
+      const on = question.multi && picked.indexOf(option.label) !== -1 ? " on" : "";
+      const act = question.multi ? "toggle" : "answer";
+      return '<button class="choice' + on + '" data-act="' + act + '" data-value="' + esc(option.value) + '" data-label="' + esc(option.label) + '">' + esc(option.label) + "</button>";
     }).join("");
+    const draft = esc(view.freeDraft || "");
     const free = question.kind === "text"
-      ? '<label class="lbl" for="free">Или своими словами</label><textarea id="free" maxlength="300" placeholder="Коротко"></textarea><div class="stack"><button class="choice primary" data-act="save-text">Дальше</button></div>'
+      ? '<label class="lbl" for="free">Или своими словами</label><textarea id="free" maxlength="300" placeholder="Коротко">' + draft + '</textarea><p class="error" id="multi-error" hidden></p><div class="stack"><button class="choice primary" data-act="save-text">Дальше</button></div>'
       : "";
+    const multiNote = question.multi ? '<p class="lead">Можно выбрать несколько.</p>' : "";
     const title = feedback ? "Отчёт" : L.KIND_META[view.kind].mark;
     const progress = stepProgress(questions, view.answers);
     const note = feedback ? '<p class="lead">' + esc(clip(eventById(view.eventId).description, 140)) + "</p>" : "";
@@ -357,6 +396,7 @@
       '<p class="sr">Вопрос ' + progress.current + " из " + progress.total + "</p>" +
       '<p class="step">' + esc(title) + "</p>" +
       "<h2>" + esc(question.prompt) + "</h2>" +
+      multiNote +
       note +
       goalsHint +
       '<div class="choices ' + layout + '">' + chips + "</div>" +
@@ -385,6 +425,26 @@
     return { current: current, total: Math.max(total, 1), ratio: total ? current / total : 1 };
   }
 
+  function toggleOption(button) {
+    const label = button.dataset.label;
+    const value = button.dataset.value;
+    const questions = view.name === "feedback" ? L.FEEDBACK : L.SCENARIOS[view.kind];
+    const question = L.nextQuestion(questions, view.answers);
+    let picked = (view.picked || []).slice();
+    const index = picked.indexOf(label);
+    if (question && question.key === "gain" && value === "nothing") {
+      picked = index === -1 ? [label] : [];
+    } else {
+      picked = picked.filter(function (item) { return item !== "Ничего особенного"; });
+      if (index === -1) picked.push(label);
+      else picked = picked.filter(function (item) { return item !== label; });
+    }
+    const typed = document.getElementById("free");
+    view.picked = picked;
+    view.freeDraft = typed ? typed.value : "";
+    render();
+  }
+
   function onAnswer(value, label) {
     const questions = view.name === "feedback" ? L.FEEDBACK : L.SCENARIOS[view.kind];
     const question = L.nextQuestion(questions, view.answers);
@@ -398,7 +458,7 @@
   function advance(answers) {
     const questions = view.name === "feedback" ? L.FEEDBACK : L.SCENARIOS[view.kind];
     if (L.nextQuestion(questions, answers)) {
-      open(Object.assign({}, view, { answers: answers }), true);
+      open(Object.assign({}, view, { answers: answers, picked: [], freeDraft: "" }), true);
       return;
     }
     if (view.name === "feedback") {

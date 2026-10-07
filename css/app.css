@@ -191,8 +191,8 @@ html.dark .track span {
 .goal-recall .goal-line { font-size: 15px; font-weight: 600; }
 
 .reset-link {
-  display: flex;
-  margin: 22px 0 0;
+  width: 100%;
+  margin-top: 56px;
 }
 
 .months {
@@ -419,7 +419,16 @@ input[type="text"],
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 10px 24px rgba(20, 28, 40, 0.18);
 }
 
-.primary::after { opacity: 0.45; }
+.choice.on {
+  color: #f7f8fa;
+  background: rgba(22, 27, 36, 0.88);
+  border-color: transparent;
+}
+
+html.dark .choice.on {
+  color: #12151a;
+  background: rgba(246, 248, 252, 0.92);
+}
 
 html.dark .primary {
   color: #12151a;
