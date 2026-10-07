@@ -106,6 +106,9 @@
     else if (act === "copy") copyPhrase(button.dataset.phrase);
     else if (act === "save-goals") saveGoals();
     else if (act === "save-text") saveTyped();
+    else if (act === "reset-ask") open({ name: "reset" });
+    else if (act === "reset-do") resetAll();
+    else if (act === "export") exportSummary();
   });
 
   function render() {
@@ -127,6 +130,7 @@
     if (view.name === "reports") return reportsScreen();
     if (view.name === "feedback") return questionScreen(L.FEEDBACK, true);
     if (view.name === "stats") return statsScreen();
+    if (view.name === "reset") return resetScreen();
     return homeScreen();
   }
 
@@ -147,7 +151,8 @@
       '<div class="tools">' +
         '<button class="tool" data-act="reports">' + iconNote() + "<span>Отчёт</span></button>" +
         '<button class="tool" data-act="stats">' + iconChart() + "<span>Сводка</span></button>" +
-      "</div>"
+      "</div>" +
+      '<button class="textbtn reset-link" data-act="reset-ask">Начать заново</button>'
     );
   }
 
@@ -345,6 +350,7 @@
     const title = feedback ? "Отчёт" : L.KIND_META[view.kind].mark;
     const progress = stepProgress(questions, view.answers);
     const note = feedback ? '<p class="lead">' + esc(clip(eventById(view.eventId).description, 140)) + "</p>" : "";
+    const goalsHint = question.key === "related" ? goalRecall() : "";
     return (
       navBack() +
       '<div class="track" aria-hidden="true"><span style="width:' + Math.round(progress.ratio * 100) + '%"></span></div>' +
@@ -352,9 +358,18 @@
       '<p class="step">' + esc(title) + "</p>" +
       "<h2>" + esc(question.prompt) + "</h2>" +
       note +
+      goalsHint +
       '<div class="choices ' + layout + '">' + chips + "</div>" +
       free
     );
+  }
+
+  function goalRecall() {
+    if (!data.goals.length) return "";
+    const lines = data.goals.map(function (goal) {
+      return '<span class="goal-line">' + esc(goal) + "</span>";
+    }).join("");
+    return '<div class="goal-recall"><span class="goals-label">Твои цели</span>' + lines + "</div>";
   }
 
   function stepProgress(questions, answers) {
@@ -549,7 +564,40 @@
         body += statBlock("Вина после отказа", "Не было " + report.guilt.none + " · прошла " + report.guilt.passed + " · ещё есть " + report.guilt.still);
       }
     }
-    return navBack() + '<p class="kicker">Сводка</p><h1>' + esc(report.title) + "</h1>" + '<div class="chips">' + chips + "</div>" + body;
+    return navBack() + '<p class="kicker">Сводка</p><h1>' + esc(report.title) + "</h1>" + '<div class="chips">' + chips + "</div>" + body + exportBlock();
+  }
+
+  function exportBlock() {
+    if (!data.goals.length && !data.events.length) return "";
+    return (
+      '<div class="stack">' +
+        '<button class="choice primary" data-act="export">Отправить сводку</button>' +
+        '<p class="quote">Файл Word, без плагинов. Его можно переслать в чат.</p>' +
+        '<p class="quote" id="export-note" hidden></p>' +
+      "</div>"
+    );
+  }
+
+  function resetScreen() {
+    return (
+      navBack() +
+      "<h1>Начать заново?</h1>" +
+      '<p class="lead">Цели, ситуации и сводка сотрутся. После этого можно заполнить всё с чистого листа.</p>' +
+      '<div class="stack">' +
+        '<button class="choice stop" data-act="reset-do">Сбросить всё</button>' +
+        '<button class="choice quiet" data-act="home">Оставить как есть</button>' +
+      "</div>"
+    );
+  }
+
+  function resetAll() {
+    data = { goals: [], events: [], goalMonths: 6 };
+    goalDraft = null;
+    stack.length = 0;
+    window.TimeStore.clear().then(function () {
+      view = { name: "home" };
+      render();
+    });
   }
 
   function statBlock(title, html) {
@@ -577,11 +625,132 @@
       const button = root.querySelector("[data-act='copy']");
       if (button) button.textContent = "Скопировано";
     };
+    return copyText(phrase).then(done, done);
+  }
+
+  function copyText(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(phrase).then(done, done);
-    } else if (tg && tg.showAlert) {
-      tg.showAlert(phrase);
+      return navigator.clipboard.writeText(text);
     }
+    return Promise.reject(new Error("clipboard"));
+  }
+
+  const ADVICE_TITLES = {
+    go: "Можно идти",
+    decline: "Сейчас лучше отказаться",
+    postpone: "Лучше выбрать другое время",
+  };
+  const DECISION_TITLES = {
+    planned: "Запланировал",
+    declined: "Отказался",
+    postponed: "Перенёс",
+  };
+  const GUILT_TITLES = {
+    none: "Вины не было",
+    passed: "Вина была и прошла",
+    still: "Вина ещё есть",
+  };
+  const FULL_MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+
+  function formatStamp(iso) {
+    const date = new Date(iso);
+    if (isNaN(date.getTime())) return "";
+    return date.getDate() + " " + FULL_MONTHS[date.getMonth()] + " " + date.getFullYear();
+  }
+
+  function answerLines(questions, answers) {
+    const lines = [];
+    (questions || []).forEach(function (question) {
+      if (!Object.prototype.hasOwnProperty.call(answers || {}, question.key)) return;
+      const value = answers[question.key];
+      const shown = question.kind === "choice" ? (L.optionLabel(question, value) || value) : value;
+      lines.push(question.prompt + " — " + shown);
+    });
+    return lines;
+  }
+
+  function summaryText() {
+    const now = new Date();
+    const lines = [
+      "Фильтр времени",
+      "Сводка для разговора",
+      formatStamp(now.toISOString()),
+      "",
+      "Цели на " + monthsPhrase(data.goalMonths),
+    ];
+    if (data.goals.length) data.goals.forEach(function (goal) { lines.push("— " + goal); });
+    else lines.push("— не заданы");
+    lines.push("", "Ситуации");
+    if (!data.events.length) lines.push("Пока нет разобранных ситуаций.");
+    data.events.slice().sort(function (a, b) {
+      return String(a.createdAt).localeCompare(String(b.createdAt));
+    }).forEach(function (event, index) {
+      const meta = L.KIND_META[event.kind] || { label: "Ситуация" };
+      lines.push("");
+      lines.push((index + 1) + ". " + (event.description || "Без названия"));
+      lines.push(meta.label + (event.createdAt ? " · " + formatStamp(event.createdAt) : ""));
+      if (event.recommendation) lines.push("Совет: " + (ADVICE_TITLES[event.recommendation] || event.recommendation));
+      lines.push("Решение: " + (DECISION_TITLES[event.decision] || "ещё не отмечено"));
+      if (event.guilt && GUILT_TITLES[event.guilt]) lines.push("После отказа: " + GUILT_TITLES[event.guilt]);
+      answerLines(L.SCENARIOS[event.kind], event.answers).forEach(function (line) { lines.push(line); });
+      if (event.feedback) {
+        lines.push("После встречи:");
+        answerLines(L.FEEDBACK, event.feedback).forEach(function (line) { lines.push(line); });
+      }
+    });
+    lines.push("", "Эти ответы можно обсудить со специалистом.");
+    return lines.join("\n");
+  }
+
+  function wordHtml(text) {
+    const body = text.split("\n").map(function (line) {
+      if (!line) return "<p>&nbsp;</p>";
+      return "<p>" + esc(line) + "</p>";
+    }).join("");
+    return "<html><head><meta charset=\"utf-8\"><title>Фильтр времени</title></head><body style=\"font-family:Calibri,sans-serif;font-size:12pt\">" + body + "</body></html>";
+  }
+
+  function noteExport(message) {
+    const note = document.getElementById("export-note");
+    if (!note) return;
+    note.hidden = false;
+    note.textContent = message;
+  }
+
+  function downloadDoc(html) {
+    const blob = new Blob(["\uFEFF" + html], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "filtr-vremeni.doc";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+  }
+
+  function exportSummary() {
+    const text = summaryText();
+    const html = wordHtml(text);
+    const file = new File(["\uFEFF" + html], "filtr-vremeni.doc", { type: "application/msword" });
+    let shared = false;
+    try {
+      shared = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+    } catch (error) {
+      shared = false;
+    }
+    const afterCopy = function () {
+      noteExport(shared ? "Файл можно отправить в чат." : "Файл Word сохранён. Текст сводки тоже скопирован — его можно вставить в чат.");
+    };
+    copyText(text).then(afterCopy, function () { noteExport("Файл Word сохранён. Его можно переслать в чат."); });
+    if (shared) {
+      navigator.share({ files: [file], title: "Фильтр времени", text: "Сводка, файл открывается в Word." }).catch(function (error) {
+        if (error && error.name === "AbortError") return;
+        downloadDoc(html);
+      });
+      return;
+    }
+    downloadDoc(html);
   }
 
   window.TimeStore.load().then(function (loaded) {

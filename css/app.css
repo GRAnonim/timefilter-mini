@@ -165,13 +165,34 @@ html.dark .track span {
   font-weight: 600;
 }
 
-.goals-strip .goal-line {
+.goals-strip .goal-line,
+.goal-recall .goal-line {
   display: block;
   margin-top: 4px;
   color: var(--ink);
   font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.02em;
+}
+
+.goal-recall {
+  margin-top: 16px;
+  padding: 12px 14px 10px;
+  border-radius: 22px;
+}
+
+.goal-recall .goals-label {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.goal-recall .goal-line { font-size: 15px; font-weight: 600; }
+
+.reset-link {
+  display: flex;
+  margin: 22px 0 0;
 }
 
 .months {
@@ -278,7 +299,8 @@ input[type="text"],
 .chip,
 .banner,
 .months,
-.tool {
+.tool,
+.goal-recall {
   position: relative;
   border: 1px solid var(--stroke);
   background: linear-gradient(180deg, var(--glass-strong), var(--glass));

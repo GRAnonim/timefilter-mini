@@ -68,5 +68,14 @@
     });
   }
 
-  window.TimeStore = { load: load, save: save };
+  function clear() {
+    try { localStorage.removeItem(KEY); } catch (error) { /* хранилище может быть закрыто */ }
+    const storage = cloud();
+    if (!storage) return Promise.resolve();
+    return new Promise(function (resolve) {
+      storage.setItem(KEY, JSON.stringify({ goals: [], events: [], goalMonths: 6 }), function () { resolve(); });
+    });
+  }
+
+  window.TimeStore = { load: load, save: save, clear: clear };
 })();
