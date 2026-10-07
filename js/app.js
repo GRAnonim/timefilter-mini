@@ -4,7 +4,8 @@
   const tg = window.Telegram && window.Telegram.WebApp;
   const insideTelegram = Boolean(tg && tg.initData);
 
-  let data = { goals: [], events: [] };
+  let data = { goals: [], events: [], goalMonths: 6 };
+  let goalDraft = null;
   let view = { name: "home" };
   const stack = [];
 
@@ -88,7 +89,12 @@
     const act = button.dataset.act;
     if (act === "home") home();
     else if (act === "back") back();
-    else if (act === "goals") open({ name: "goals" });
+    else if (act === "goals") {
+      goalDraft = null;
+      open({ name: "goals" });
+    }
+    else if (act === "months") changeMonths(Number(button.dataset.delta));
+    else if (act === "skip-desc") skipDescription();
     else if (act === "describe") open({ name: "describe", kind: button.dataset.kind });
     else if (act === "stats") open({ name: "stats", period: "week" });
     else if (act === "period") open({ name: "stats", period: button.dataset.period }, true);
@@ -126,19 +132,21 @@
 
   function homeScreen() {
     if (data.goals.length < 2) return goalsScreen(true);
-    const line = data.goals.map(esc).join(" · ");
+    const lines = data.goals.map(function (goal) {
+      return '<span class="goal-line">' + esc(goal) + "</span>";
+    }).join("");
     return (
       '<p class="kicker">Фильтр времени</p>' +
       "<h1>Что пришло?</h1>" +
-      '<button class="goals-strip" data-act="goals"><span>Цели на полгода</span><strong>' + line + "</strong></button>" +
+      '<button class="goals-strip" data-act="goals"><span class="goals-label">Цели на ' + esc(monthsPhrase(data.goalMonths)) + "</span>" + lines + "</button>" +
       '<div class="stack">' +
         card("work", "Работа", "Встречи, задачи, проекты") +
         card("family", "Семья", "Просьбы и встречи близких") +
         card("friend", "Друзья", "Гости, кино, «давай увидимся»") +
       "</div>" +
-      '<div class="footer-links">' +
-        '<button class="textbtn" data-act="reports">Отчёт</button>' +
-        '<button class="textbtn" data-act="stats">Сводка</button>' +
+      '<div class="tools">' +
+        '<button class="tool" data-act="reports">' + iconNote() + "<span>Отчёт</span></button>" +
+        '<button class="tool" data-act="stats">' + iconChart() + "<span>Сводка</span></button>" +
       "</div>"
     );
   }
@@ -148,18 +156,107 @@
   }
 
   function goalsScreen(embedded) {
-    const values = [data.goals[0] || "", data.goals[1] || "", data.goals[2] || ""];
+    const draft = ensureGoalDraft();
+    const values = draft.values;
+    const months = draft.months;
     return (
       (embedded ? "" : navBack()) +
       '<p class="kicker">Ориентиры</p>' +
-      "<h1>Две цели на полгода</h1>" +
-      '<p class="lead">На них будем смотреть, когда придёт приглашение. Третья — если нужна.</p>' +
+      "<h1>Две или три цели</h1>" +
+      '<p class="lead">На них будем смотреть, когда придёт приглашение.</p>' +
+      '<div class="months">' +
+        '<button class="stepper" type="button" data-act="months" data-delta="-1" aria-label="Короче"' + (months <= 3 ? " disabled" : "") + ">−</button>" +
+        "<b>" + esc(monthsCount(months)) + "</b>" +
+        '<button class="stepper" type="button" data-act="months" data-delta="1" aria-label="Дольше"' + (months >= 12 ? " disabled" : "") + ">+</button>" +
+      "</div>" +
+      '<p class="quote">' + esc(pick(GOAL_QUOTES, String(new Date().getDate()))) + "</p>" +
       field("Первая", "g1", values[0], "Закрыть диплом") +
       field("Вторая", "g2", values[1], "Английский") +
       field("Третья, если нужна", "g3", values[2], "Можно оставить пустой") +
       '<p class="error" id="goal-error" hidden></p>' +
       '<div class="stack"><button class="choice primary" data-act="save-goals">Сохранить</button></div>'
     );
+  }
+
+  function ensureGoalDraft() {
+    if (!goalDraft) {
+      goalDraft = {
+        months: data.goalMonths || 6,
+        values: [data.goals[0] || "", data.goals[1] || "", data.goals[2] || ""],
+      };
+    }
+    return goalDraft;
+  }
+
+  function readGoalFields() {
+    const draft = ensureGoalDraft();
+    ["g1", "g2", "g3"].forEach(function (id, index) {
+      const field = document.getElementById(id);
+      if (field) draft.values[index] = field.value;
+    });
+  }
+
+  function changeMonths(delta) {
+    const draft = ensureGoalDraft();
+    readGoalFields();
+    draft.months = Math.min(12, Math.max(3, draft.months + delta));
+    render();
+  }
+
+  function monthsCount(months) {
+    const mod10 = months % 10;
+    const mod100 = months % 100;
+    if (mod10 === 1 && mod100 !== 11) return months + " месяц";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return months + " месяца";
+    return months + " месяцев";
+  }
+
+  function monthsPhrase(months) {
+    if (months === 12) return "год";
+    return monthsCount(months);
+  }
+
+  function pick(list, seed) {
+    let index = 0;
+    const text = String(seed || "");
+    for (let i = 0; i < text.length; i += 1) index = (index + text.charCodeAt(i)) % list.length;
+    return list[index % list.length];
+  }
+
+  const GOAL_QUOTES = [
+    "Срок делает цель яснее.",
+    "Две ясные цели лучше десяти размытых.",
+    "Направление важнее скорости.",
+    "Малый честный шаг лучше громкого обещания.",
+    "Выбранный срок бережёт силы: не надо решать всё сразу.",
+  ];
+
+  const DECISION_QUOTES = {
+    go: [
+      "Можно согласиться. Можно и отказаться — без вины.",
+      "Отказ от встречи не делает тебя плохим.",
+      "Если сил нет, честное нет лучше усталого да.",
+    ],
+    decline: [
+      "Отказ от встречи не отменяет уважения к человеку.",
+      "Честное нет бережнее, чем согласие без сил.",
+      "Беречь силы — тоже ответственность.",
+      "Спокойный отказ оставляет место для настоящего согласия.",
+      "Короткого объяснения достаточно.",
+    ],
+    postpone: [
+      "Не сейчас — не значит никогда.",
+      "Другое время — тоже ответ, не побег.",
+      "Отложить можно спокойно.",
+    ],
+  };
+
+  function iconNote() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3.5h6.2L19 8.2V20a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 7 20V5A1.5 1.5 0 0 1 8.5 3.5H8z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 3.8V8h4.2M9 12.5h6M9 16h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+
+  function iconChart() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V10M12 19V5M19 19v-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 19h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
   }
 
   function navBack() {
@@ -182,33 +279,32 @@
       return;
     }
     data.goals = goals.slice(0, 3);
+    data.goalMonths = ensureGoalDraft().months;
+    goalDraft = null;
     save().then(home);
   }
 
   function describeScreen() {
     const meta = L.KIND_META[view.kind];
+    const preview = nextSituationName();
     return (
       navBack() +
       '<p class="kicker">' + esc(meta.mark) + "</p>" +
       "<h1>Как это называется?</h1>" +
-      '<p class="lead">Одно-два слова, чтобы потом узнать.</p>' +
-      '<label class="lbl" for="desc">Ситуация</label>' +
-      '<textarea id="desc" data-focus maxlength="500" placeholder="Созвон в четверг"></textarea>' +
-      '<p class="error" id="desc-error" hidden></p>' +
-      '<div class="stack"><button class="choice primary" data-act="save-text">Дальше</button></div>'
+      '<p class="lead">Необязательно. Если пропустить, будет «' + esc(preview) + "».</p>" +
+      '<label class="lbl" for="desc">Комментарий</label>' +
+      '<textarea id="desc" maxlength="500" placeholder="Например, созвон в четверг"></textarea>' +
+      '<div class="stack">' +
+        '<button class="choice primary" data-act="save-text">Дальше</button>' +
+        '<button class="choice quiet" data-act="skip-desc">Пропустить</button>' +
+      "</div>"
     );
   }
 
   function saveTyped() {
     if (view.name === "describe") {
       const text = document.getElementById("desc").value.trim();
-      const error = document.getElementById("desc-error");
-      if (text.length < 3) {
-        error.hidden = false;
-        error.textContent = "Напиши хотя бы пару слов.";
-        return;
-      }
-      open({ name: "question", kind: view.kind, description: text, answers: {} });
+      open({ name: "question", kind: view.kind, description: text || nextSituationName(), answers: {} });
       return;
     }
     const typed = document.getElementById("free");
@@ -219,6 +315,19 @@
     const answers = Object.assign({}, view.answers);
     answers[question.key] = text.slice(0, 300);
     advance(answers);
+  }
+
+  function skipDescription() {
+    open({ name: "question", kind: view.kind, description: nextSituationName(), answers: {} });
+  }
+
+  function nextSituationName() {
+    let max = 0;
+    data.events.forEach(function (event) {
+      const match = /^Ситуация (\d+)$/.exec(String(event.description || "").trim());
+      if (match) max = Math.max(max, Number(match[1]));
+    });
+    return "Ситуация " + (max + 1);
   }
 
   function questionScreen(questions, feedback) {
@@ -311,6 +420,7 @@
       '<p class="kicker">' + esc(clip(event.description, 80)) + "</p>" +
       '<span class="verdict ' + advice.code + '">' + esc(advice.title) + "</span>" +
       '<p class="body">' + esc(advice.body) + "</p>" +
+      '<p class="quote">' + esc(pick(DECISION_QUOTES[advice.code] || DECISION_QUOTES.postpone, event.id)) + "</p>" +
       phrase +
       '<div class="stack">' +
         '<button class="choice go" data-act="decision" data-value="planned">Запланировать</button>' +
@@ -475,7 +585,16 @@
   }
 
   window.TimeStore.load().then(function (loaded) {
-    data = loaded;
+    data = normalizeData(loaded);
     render();
   });
+
+  function normalizeData(loaded) {
+    const next = loaded || {};
+    next.goals = next.goals || [];
+    next.events = next.events || [];
+    const months = Number(next.goalMonths);
+    next.goalMonths = months >= 3 && months <= 12 ? Math.round(months) : 6;
+    return next;
+  }
 })();

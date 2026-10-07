@@ -158,19 +158,89 @@ html.dark .track span {
   cursor: pointer;
 }
 
-.goals-strip span {
+.goals-strip .goals-label {
   display: block;
   color: var(--muted);
   font-size: 13px;
   font-weight: 600;
 }
 
-.goals-strip strong {
+.goals-strip .goal-line {
   display: block;
-  margin-top: 3px;
+  margin-top: 4px;
+  color: var(--ink);
   font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.02em;
+}
+
+.months {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 8px 10px;
+  border-radius: 22px;
+}
+
+.months b {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.stepper {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+html.dark .stepper { background: rgba(255, 255, 255, 0.12); }
+
+.stepper:disabled { opacity: 0.35; cursor: default; }
+
+.quote {
+  margin: 14px 2px 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 36px;
+}
+
+.tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 58px;
+  padding: 12px 14px;
+  border-radius: 22px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.tool svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
 }
 
 .stack, .choices {
@@ -206,7 +276,9 @@ input[type="text"],
 .phrase,
 .goals-strip,
 .chip,
-.banner {
+.banner,
+.months,
+.tool {
   position: relative;
   border: 1px solid var(--stroke);
   background: linear-gradient(180deg, var(--glass-strong), var(--glass));
@@ -220,7 +292,9 @@ input[type="text"],
 .goals-strip,
 .stat,
 .phrase,
-.banner {
+.banner,
+.months,
+.tool {
   border-radius: 26px;
 }
 
@@ -275,9 +349,10 @@ input[type="text"],
 
 .tap::before {
   left: 16px;
-  top: 18px;
+  top: 50%;
   width: 30px;
   height: 30px;
+  margin-top: -15px;
   background:
     radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95), transparent 36%),
     radial-gradient(circle at 50% 58%, var(--dot), rgba(255, 255, 255, 0.2) 72%);
@@ -310,7 +385,7 @@ input[type="text"],
 .choice.stop { --mark: var(--stop); }
 .choice.later { --mark: var(--later); }
 
-.tap:active, .choice:active, .goals-strip:active, .chip:active, .textbtn:active {
+.tap:active, .choice:active, .goals-strip:active, .chip:active, .textbtn:active, .tool:active, .stepper:active {
   transform: scale(0.985);
 }
 

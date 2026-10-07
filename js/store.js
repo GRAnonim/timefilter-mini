@@ -58,6 +58,7 @@
     if (payload.length > 4000 && data.events.length > 8) {
       const trimmed = {
         goals: data.goals,
+        goalMonths: data.goalMonths,
         events: data.events.slice(-8),
       };
       payload = JSON.stringify(trimmed);
