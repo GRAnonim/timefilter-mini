@@ -175,7 +175,7 @@
         "<b>" + esc(monthsCount(months)) + "</b>" +
         '<button class="stepper" type="button" data-act="months" data-delta="1" aria-label="Дольше"' + (months >= 12 ? " disabled" : "") + ">+</button>" +
       "</div>" +
-      '<p class="quote">' + esc(pick(GOAL_QUOTES, String(new Date().getDate()))) + "</p>" +
+      quoteHtml(quoteFor("goals")) +
       field("Первая", "g1", values[0], "Закрыть диплом") +
       field("Вторая", "g2", values[1], "Английский") +
       field("Третья, если нужна", "g3", values[2], "Можно оставить пустой") +
@@ -222,40 +222,34 @@
     return monthsCount(months);
   }
 
-  function pick(list, seed) {
-    let index = 0;
-    const text = String(seed || "");
-    for (let i = 0; i < text.length; i += 1) index = (index + text.charCodeAt(i)) % list.length;
-    return list[index % list.length];
+  function quoteFor(pool) {
+    if (!view.quoteCache) view.quoteCache = {};
+    if (!view.quoteCache[pool]) view.quoteCache[pool] = takeQuote(pool);
+    return view.quoteCache[pool];
   }
 
-  const GOAL_QUOTES = [
-    "Срок делает цель яснее.",
-    "Две ясные цели лучше десяти размытых.",
-    "Направление важнее скорости.",
-    "Малый честный шаг лучше громкого обещания.",
-    "Выбранный срок бережёт силы: не надо решать всё сразу.",
-  ];
+  function takeQuote(pool) {
+    const list = (window.TimeQuotes && window.TimeQuotes[pool]) || [];
+    if (!list.length) return null;
+    const key = "tf-q-" + pool;
+    let index = 0;
+    try {
+      index = parseInt(localStorage.getItem(key) || "0", 10);
+      if (!isFinite(index) || index < 0) index = 0;
+    } catch (e) {
+      index = 0;
+    }
+    index = index % list.length;
+    const row = list[index];
+    try { localStorage.setItem(key, String((index + 1) % list.length)); } catch (e) {}
+    return { text: row[0], author: row[1] || "" };
+  }
 
-  const DECISION_QUOTES = {
-    go: [
-      "Можно согласиться. Можно и отказаться — без вины.",
-      "Отказ от встречи не делает тебя плохим.",
-      "Если сил нет, честное нет лучше усталого да.",
-    ],
-    decline: [
-      "Отказ от встречи не отменяет уважения к человеку.",
-      "Честное нет бережнее, чем согласие без сил.",
-      "Беречь силы — тоже ответственность.",
-      "Спокойный отказ оставляет место для настоящего согласия.",
-      "Короткого объяснения достаточно.",
-    ],
-    postpone: [
-      "Не сейчас — не значит никогда.",
-      "Другое время — тоже ответ, не побег.",
-      "Отложить можно спокойно.",
-    ],
-  };
+  function quoteHtml(item) {
+    if (!item || !item.text) return "";
+    const author = item.author ? "<cite>" + esc(item.author) + "</cite>" : "";
+    return '<p class="quote">«' + esc(item.text) + "»" + author + "</p>";
+  }
 
   function iconNote() {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3.5h6.2L19 8.2V20a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 7 20V5A1.5 1.5 0 0 1 8.5 3.5H8z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 3.8V8h4.2M9 12.5h6M9 16h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
@@ -495,7 +489,7 @@
       '<p class="kicker">' + esc(clip(event.description, 80)) + "</p>" +
       '<span class="verdict ' + advice.code + '">' + esc(advice.title) + "</span>" +
       '<p class="body">' + esc(advice.body) + "</p>" +
-      '<p class="quote">' + esc(pick(DECISION_QUOTES[advice.code] || DECISION_QUOTES.postpone, event.id)) + "</p>" +
+      quoteHtml(quoteFor(advice.code === "go" || advice.code === "decline" ? advice.code : "postpone")) +
       phrase +
       '<div class="stack">' +
         '<button class="choice go" data-act="decision" data-value="planned">Запланировать</button>' +
@@ -517,9 +511,12 @@
 
   function guiltScreen() {
     if (view.name === "noted") return notedScreen();
+    const quote = quoteFor("guilt");
+    view.guiltQuote = quote;
     return (
       "<h1>Как с виной?</h1>" +
       '<p class="lead">Отказ от встречи — не отказ от человека.</p>' +
+      quoteHtml(quote) +
       '<div class="stack">' +
         '<button class="choice" data-act="guilt" data-value="none">Вины нет</button>' +
         '<button class="choice" data-act="guilt" data-value="passed">Была и прошла</button>' +
@@ -538,7 +535,10 @@
       still: "Записал, что вина ещё есть. Это не значит, что отказ был ошибкой.",
       skip: "Хорошо, вину не записываю.",
     };
-    save().then(function () { open({ name: "noted", decision: "declined", note: lines[value] }); });
+    const followQuote = view.guiltQuote || quoteFor("guilt");
+    save().then(function () {
+      open({ name: "noted", decision: "declined", note: lines[value], followQuote: followQuote });
+    });
   }
 
   function notedScreen() {
@@ -550,6 +550,7 @@
     return (
       "<h1>Отметил</h1>" +
       '<p class="body">' + esc(notes[view.decision] || view.note || "") + "</p>" +
+      (view.decision === "declined" ? quoteHtml(view.followQuote) : "") +
       '<div class="stack"><button class="choice primary" data-act="home">На главную</button></div>'
     );
   }

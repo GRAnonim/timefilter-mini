@@ -236,6 +236,14 @@ html.dark .stepper { background: rgba(255, 255, 255, 0.12); }
   font-weight: 500;
 }
 
+.quote cite {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+
 .tools {
   display: grid;
   grid-template-columns: 1fr 1fr;
