@@ -272,6 +272,8 @@ html.dark .stepper { background: rgba(255, 255, 255, 0.12); }
   flex: none;
 }
 
+.notify-link { margin-top: 10px; }
+
 .stack, .choices {
   display: flex;
   flex-direction: column;

@@ -99,6 +99,10 @@
     else if (act === "stats") open({ name: "stats", period: "week" });
     else if (act === "period") open({ name: "stats", period: button.dataset.period }, true);
     else if (act === "reports") open({ name: "reports" });
+    else if (act === "notify") openNotify();
+    else if (act === "notify-hour") pickNotifyHour(button.dataset.time);
+    else if (act === "notify-save") saveNotify(false);
+    else if (act === "notify-off") saveNotify(true);
     else if (act === "begin-feedback") open({ name: "feedback", eventId: button.dataset.id, answers: {} });
     else if (act === "answer") onAnswer(button.dataset.value, button.dataset.label);
     else if (act === "toggle") toggleOption(button);
@@ -131,6 +135,7 @@
     if (view.name === "reports") return reportsScreen();
     if (view.name === "feedback") return questionScreen(L.FEEDBACK, true);
     if (view.name === "stats") return statsScreen();
+    if (view.name === "notify") return notifyScreen();
     if (view.name === "reset") return resetScreen();
     return homeScreen();
   }
@@ -153,6 +158,7 @@
         '<button class="tool" data-act="reports">' + iconNote() + "<span>Отчёт</span></button>" +
         '<button class="tool" data-act="stats">' + iconChart() + "<span>Сводка</span></button>" +
       "</div>" +
+      '<button class="tool notify-link" data-act="notify">' + iconBell() + "<span>Уведомления · " + esc(notifyCaption()) + "</span></button>" +
       '<button class="tool reset-link" data-act="reset-ask">' + iconReset() + "<span>Начать заново</span></button>"
     );
   }
@@ -257,6 +263,10 @@
 
   function iconChart() {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V10M12 19V5M19 19v-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 19h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  }
+
+  function iconBell() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.2 16.2h11.6L16.6 14V10.2a4.6 4.6 0 0 0-9.2 0V14l-1.2 2.2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 16.4a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
   }
 
   function iconReset() {
@@ -639,6 +649,96 @@
     );
   }
 
+  const NOTIFY_HOURS = ["08:00", "09:00", "12:00", "18:00", "20:00", "21:00", "22:00"];
+
+  function notifyCaption() {
+    if (data.notifyOn === false) return "выкл";
+    return data.notifyClock || "21:00";
+  }
+
+  function openNotify() {
+    open({
+      name: "notify",
+      on: data.notifyOn !== false,
+      clock: data.notifyClock || "21:00",
+      note: "",
+    });
+  }
+
+  function pickNotifyHour(time) {
+    view.on = true;
+    view.clock = time;
+    view.note = "";
+    render();
+  }
+
+  function notifyScreen() {
+    const clock = view.clock || "21:00";
+    const hours = NOTIFY_HOURS.map(function (hour) {
+      const on = view.on !== false && clock === hour ? " on" : "";
+      return '<button class="chip' + on + '" data-act="notify-hour" data-time="' + hour + '">' + hour + "</button>";
+    }).join("");
+    const note = view.note ? '<p class="quote">' + esc(view.note) + "</p>" : "";
+    return (
+      navBack() +
+      '<p class="kicker">Напоминание</p>' +
+      "<h1>Когда напомнить</h1>" +
+      '<p class="lead">Одно сообщение в чат, если встреча уже отмечена, а отчёт ещё не записан.</p>' +
+      '<div class="chips">' + hours + "</div>" +
+      '<label class="lbl" for="notify-time">Свой час</label>' +
+      '<input id="notify-time" type="text" inputmode="numeric" maxlength="5" placeholder="21:30" value="' + esc(clock) + '">' +
+      '<p class="error" id="notify-error" hidden></p>' +
+      note +
+      '<div class="stack">' +
+        '<button class="choice primary" data-act="notify-save">Сохранить</button>' +
+        '<button class="choice quiet" data-act="notify-off">Выключить</button>' +
+      "</div>"
+    );
+  }
+
+  function saveNotify(turnOff) {
+    if (turnOff) {
+      data.notifyOn = false;
+      view.on = false;
+    } else {
+      const field = document.getElementById("notify-time");
+      const clock = parseClock(field ? field.value : view.clock);
+      const error = document.getElementById("notify-error");
+      if (!clock) {
+        if (error) {
+          error.hidden = false;
+          error.textContent = "Напиши час, например 21:30.";
+        }
+        return;
+      }
+      data.notifyOn = true;
+      data.notifyClock = clock;
+      view.clock = clock;
+      view.on = true;
+    }
+    const payload = data.notifyOn ? "c" + data.notifyClock.replace(":", "") : "off";
+    save().then(function () {
+      if (insideTelegram && tg.openTelegramLink) {
+        tg.openTelegramLink("https://t.me/timefilter_bot?start=" + payload);
+        return;
+      }
+      view.note = data.notifyOn
+        ? "Сохранено: каждый день в " + data.notifyClock + ". В Telegram это же время получит бот."
+        : "Уведомления выключены.";
+      render();
+    });
+  }
+
+  function parseClock(value) {
+    const text = String(value || "").trim().replace(".", ":");
+    const match = text.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return "";
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour > 23 || minute > 59) return "";
+    return (hour < 10 ? "0" : "") + hour + ":" + (minute < 10 ? "0" : "") + minute;
+  }
+
   function resetScreen() {
     return (
       navBack() +
@@ -825,6 +925,8 @@
     next.events = next.events || [];
     const months = Number(next.goalMonths);
     next.goalMonths = months >= 3 && months <= 12 ? Math.round(months) : 6;
+    next.notifyOn = next.notifyOn === false ? false : true;
+    next.notifyClock = parseClock(next.notifyClock) || "21:00";
     return next;
   }
 })();

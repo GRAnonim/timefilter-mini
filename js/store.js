@@ -59,6 +59,8 @@
       const trimmed = {
         goals: data.goals,
         goalMonths: data.goalMonths,
+        notifyOn: data.notifyOn,
+        notifyClock: data.notifyClock,
         events: data.events.slice(-8),
       };
       payload = JSON.stringify(trimmed);
